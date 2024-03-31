@@ -1,6 +1,6 @@
 import { Action, ActionPanel, Icon, List } from "@raycast/api";
 import { useFetch } from "@raycast/utils";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { buildUrl, type Check } from "./utils";
 
@@ -13,6 +13,11 @@ const applyFix = (text: string, { pos, len, s }: Pick<Check, "pos" | "len" | "s"
 export default function Command() {
   const [text, setText] = useState("");
   const { isLoading, data, mutate } = useFetch<Check[]>(buildUrl(text), { execute: !!text });
+
+  const fixedText = useMemo(() => {
+    if (!data) return text;
+    return data.toReversed().reduce(applyFix, text);
+  }, [data, text]);
 
   const fixOne = (check: Check, i: number) => {
     setText(applyFix(text, check));
@@ -27,11 +32,7 @@ export default function Command() {
   const fixAll = () => {
     if (!data) return;
 
-    const newText = data.toReversed().reduce((acc, check) => {
-      return applyFix(acc, check);
-    }, text);
-
-    setText(newText);
+    setText(fixedText);
 
     mutate(Promise.resolve(), {
       optimisticUpdate: () => [],
@@ -49,20 +50,34 @@ export default function Command() {
       {!data?.length ? (
         <List.EmptyView title={"All good!"} description={"No spelling mistakes found."} />
       ) : (
-        data.map((check, i) => (
-          <List.Item
-            key={check.word}
-            title={check.word}
-            subtitle={check.s.slice(0, 5).join(", ")}
-            icon={Icon.XMarkCircle}
-            actions={
-              <ActionPanel>
-                <Action title="Fix All" onAction={() => fixAll()} />
-                <Action title="Fix Word" onAction={() => fixOne(check, i)} />
-              </ActionPanel>
-            }
-          />
-        ))
+        <>
+          {!isLoading && (
+            <List.Item
+              key={"fix-all"}
+              title={""}
+              subtitle={`${fixedText}`}
+              icon={{ source: "🪄" }}
+              actions={
+                <ActionPanel>
+                  <Action title="Fix All" onAction={() => fixAll()} />
+                </ActionPanel>
+              }
+            />
+          )}
+          {data.map((check, i) => (
+            <List.Item
+              key={`fix-${check.word}`}
+              title={check.word}
+              subtitle={check.s.slice(0, 5).join(", ")}
+              icon={Icon.XMarkCircle}
+              actions={
+                <ActionPanel>
+                  <Action title="Fix Word" onAction={() => fixOne(check, i)} />
+                </ActionPanel>
+              }
+            />
+          ))}
+        </>
       )}
     </List>
   );
